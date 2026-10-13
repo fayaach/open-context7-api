@@ -24,26 +24,45 @@ class RepositoryRequest(BaseModel):
     repo_url: str = Field(
         ..., description="The full URL of the Git repository to clone", alias="repoUrl"
     )
-    access_token: str = Field(
-        ...,
-        description="Authentication token for repository access",
-        alias="accessToken",
+
+    access_token: str | None = Field(
+        None, description="Authentication token for accessing the repository"
     )
 
-    @field_validator("repo_url", "access_token")  # noqa
+    @field_validator("access_token")
     @classmethod
-    def validate_non_empty(cls, v: str) -> str:
-        """Check that repository fields are not empty strings.
+    def validate_access_token(cls, v: str | None) -> str | None:
+        """Check that access_token is stripped.
 
         Args:
-            v: The field value to validate.
+            v: The token string to validate.
 
         Returns:
-            The validated string value.
+            The stripped token string.
 
         Raises:
-            ValueError: If the field is empty or contains only whitespace.
+            ValidationError: If token is None (actually it should be None).
         """
+        if v is None:
+            return None
+        stripped = v.strip()
+        return stripped if stripped else None
+
+    @field_validator("repo_url")
+    @classmethod
+    def validate_repo_url(cls, v: str) -> str:
+        """Check that repo_url is not empty.
+
+        Args:
+            v: The repository URL.
+
+        Returns:
+            The validated repository URL.
+
+        Raises:
+            ValidationError: If repository URL is empty and not None.
+        """
+        print(f"DEBUG: Validating repo_url: '{v}'")
         return validate_non_empty_string(v)
 
 

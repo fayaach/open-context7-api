@@ -74,12 +74,13 @@ class AIProvider:
             EmbeddingServiceError: If embedding creation fails.
         """
         try:
+            litellm.drop_params = True
             response = await litellm.aembedding(
                 model=settings.EMBEDDING_MODEL,
                 input=[text],
                 api_key=settings.EMBEDDING_API_KEY,
                 api_base=settings.EMBEDDING_BASE_URL,
-                dimensions=settings.EMBEDDING_DIMENSION,
+                dimensions=settings.EMBEDDING_DIMENSION
             )
             return EmbeddingResult(
                 embedding=response["data"][0]["embedding"],

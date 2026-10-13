@@ -112,6 +112,9 @@ async def create(
     }
     ```
     """
+    # Log the received request for debugging
+    print(f"DEBUG: Received request_data: {request_data.dict()}")
+
     # Create GitLab adapter directly
     org, project = parse_repo_url(request_data.repo_url)
     provider = GitLabAdapter(

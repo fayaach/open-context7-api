@@ -21,12 +21,12 @@ from src.utils.common import md5_hash
 class GitLabAdapter:
     """GitLab repository adapter for library extraction."""
 
-    def __init__(self, url: str, token: str, org: str, project: str):
+    def __init__(self, url: str, token: str | None, org: str, project: str):
         """Initialize GitLab adapter for project.
 
         Args:
             url: GitLab repository URL or GitLab instance base URL.
-            token: Personal access token for GitLab API.
+            token: Personal access token for GitLab API. Optional for public repositories.
             org: Organization.
             project: Project name.
         """
@@ -34,7 +34,7 @@ class GitLabAdapter:
         # Extract GitLab base URL for API calls
         parsed = urlparse(url)
         self.base_url = f"{parsed.scheme}://{parsed.netloc}"
-        self.token = token
+        self.token = token if token and token.strip() else None
         self.org = org
         self.project = project
         self.branch = settings.GIT_DEFAULT_BRANCH
@@ -72,10 +72,10 @@ class GitLabAdapter:
     def _validate_access(self) -> bool:
         """GitLab access validation and project info cache."""
         try:
+            logger.info(f"Validating GitLab access for {self.base_url} with token={self.token is not None}")
             gitlab_client = gitlab.Gitlab(
-                self.base_url, private_token=self.token, timeout=GITLAB_API_TIMEOUT
+                self.base_url, private_token=self.token, timeout=GITLAB_API_TIMEOUT, ssl_verify=True
             )
-            # Get full project info (remove lazy=True)
             project = gitlab_client.projects.get(f"{self.org}/{self.project}")
 
             # Cache project metadata
@@ -85,7 +85,7 @@ class GitLabAdapter:
             }
             return True
         except Exception as e:
-            logger.error(f"Cannot access GitLab /{self.org}/{self.project}: {e}")
+            logger.error(f"Cannot access GitLab /{self.org}/{self.project}: {e}", exc_info=True)
             return False
 
     async def collect_files(self) -> dict[str, str]:
@@ -122,7 +122,10 @@ class GitLabAdapter:
             Exception: If clone fails.
         """
         parsed = urlparse(self.url)
-        clone_url = f"{parsed.scheme}://oauth2:{self.token}@{parsed.netloc}/{self.org}/{self.project}.git"
+        if self.token:
+            clone_url = f"{parsed.scheme}://oauth2:{self.token}@{parsed.netloc}/{self.org}/{self.project}.git"
+        else:
+            clone_url = f"{parsed.scheme}://{parsed.netloc}/{self.org}/{self.project}.git"
 
         if Path(local_path).exists():
             shutil.rmtree(local_path)
@@ -196,11 +199,9 @@ class GitLabAdapter:
         """Fetch latest commit ID from GitLab API."""
         try:
             gitlab_client = gitlab.Gitlab(
-                self.base_url, private_token=self.token, timeout=GITLAB_API_TIMEOUT
+                self.base_url, private_token=self.token, timeout=GITLAB_API_TIMEOUT, ssl_verify=True
             )
-            gitlab_project = gitlab_client.projects.get(
-                f"{self.org}/{self.project}", lazy=True
-            )
+            gitlab_project = gitlab_client.projects.get(f"{self.org}/{self.project}")
 
             # Get latest commit from the branch
             commits = gitlab_project.commits.list(ref_name=self.branch, per_page=1)
@@ -232,11 +233,7 @@ class GitLabAdapter:
         """
         try:
             gitlab_client = gitlab.Gitlab(
-                self.base_url, private_token=self.token, timeout=GITLAB_API_TIMEOUT
-            )
-            # Use lazy loading to avoid loading full project details
-            gitlab_project = gitlab_client.projects.get(
-                f"{self.org}/{self.project}", lazy=True
+                self.base_url, private_token=self.token, timeout=GITLAB_API_TIMEOUT, ssl_verify=False
             )
 
             # Get tags directly
@@ -268,10 +265,8 @@ class GitLabAdapter:
         Raises:
             ValidationError: If required repo info is missing.
         """
-        if not all(
-            [library.repo_url, library.access_token, library.org, library.project]
-        ):
-            raise ValidationError("Missing required repository information")
+        if not all([library.repo_url, library.org, library.project]):
+            raise ValidationError("Missing required repository information (repo_url, org, or project)")
 
         # Fields are validated above, safe to use
         adapter = cls(
