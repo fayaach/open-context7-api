@@ -141,7 +141,7 @@ class GitLabAdapter:
                 logger.error(f"Failed to checkout tag {self.tag}: {e}")
                 raise
 
-    def _build_file_mapping(self, local_path: str) -> dict[str, str]:
+    def _build_file_mapping(self, local_path: str, ignore_list: list[str] | None = None) -> dict[str, str]:
         """Build file mapping from local directory.
 
         Args:
@@ -152,11 +152,40 @@ class GitLabAdapter:
         """
         files: dict[str, str] = {}
         path_obj = Path(local_path)
+        extensions = {".md", ".rst"}
+        ignore = {
+            "AGENTS.md",
+            "AGENTS.rst",
+            "CHANGELOG.md",
+            "CHANGELOG.rst",
+            "CODE_OF_CONDUCT.md",
+            "CODE_OF_CONDUCT.rst",
+            "CONTRIBUTING.md",
+            "CONTRIBUTING.rst",
+            "CONTRIBUTORS.md",
+            "CONTRIBUTORS.rst",
+            "LICENSE"
+            "LICENSE.md",
+            "LICENSE.rst",
+            "README.md",
+            "README.rst",
+            "SECURITY.md",
+            "SECURITY.rst",
+        }
 
-        for md_file in path_obj.rglob("*.md"):
+        for file in path_obj.rglob("*"):
+
+            # ignore unsupported extensions
+            if file.suffix.lower() not in extensions:
+                continue
+
+            # ignore well-known files
+            if file.name in ignore:
+                continue
+
             try:
-                relative_path = md_file.relative_to(path_obj)
-                content = md_file.read_text(encoding="utf-8")
+                relative_path = file.relative_to(path_obj)
+                content = file.read_text(encoding="utf-8")
 
                 # Create GitLab blob URL using the correct ref
                 ref_name = (
@@ -166,8 +195,9 @@ class GitLabAdapter:
                 )
                 file_url = f"{self.url}/blob/{ref_name}/{relative_path}"
                 files[file_url] = content
+
             except Exception as e:
-                logger.warning(f"Failed to read {md_file}: {e}")
+                logger.warning(f"Failed to read {file}: {e}")
 
         return files
 
